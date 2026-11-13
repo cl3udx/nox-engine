@@ -1,0 +1,22 @@
+name: Build iOS dylib
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Compile dylib for iOS
+        run: |
+          clang++ -arch arm64 -dynamiclib -std=c++17 \
+          -framework Foundation -framework Metal -framework MetalKit -framework QuartzCore -framework CoreGraphics \
+          main.mm -o NoxEngine.dylib
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoxEngine-dylib
+          path: NoxEngine.dylib
