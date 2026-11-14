@@ -16,7 +16,8 @@ jobs:
 
     - name: Configure CMake for iOS
       run: |
-        cmake -B build \
+        # Указываем CMake искать CMakeLists.txt внутри папки nox-engine/nox-engine или где он там лежит
+        cmake -S ./nox-engine -B build \
           -DCMAKE_SYSTEM_NAME=iOS \
           -DCMAKE_OSX_DEPLOYMENT_TARGET="14.0" \
           -DCMAKE_OSX_ARCHITECTURES="arm64"
