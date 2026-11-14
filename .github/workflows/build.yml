@@ -4,15 +4,15 @@ on: [push]
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Compile dylib for iOS
         run: |
           clang++ -arch arm64 -dynamiclib -std=c++17 \
-          -framework Foundation -framework Metal -framework MetalKit -framework QuartzCore -framework CoreGraphics \
+          -framework Foundation -framework Metal -framework Metalkit \
           main.mm -o NoxEngine.dylib
 
       - name: Upload Artifact
