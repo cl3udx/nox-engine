@@ -1,6 +1,6 @@
 // Language: C++17 / Objective-C++
 // Target: iOS 18.5+ Non-Jailbroken (Standoff 2 / Unity Il2Cpp)
-// Master Build v8.1: Enterprise Security + Pattern Scanner + Memory Protection Restoration + 60Hz Optimized + Animated GUI & Weather FX
+// Master Build v8.2: Enterprise Security + Pattern Scanner + Memory Protection Restoration + 60Hz Optimized + Animated GUI & Weather FX
 
 #include <iostream>
 #include <vector>
@@ -209,7 +209,6 @@ public:
         return buffer;
     }
 
-    // --- MEMORY PROTECTION RESTORATION (W -> RX) ---
     template <typename T>
     static bool WriteData(uint64_t address, T value) {
         if (address < 0x1000 || address > 0x7FFFFFFFFFFF) return false;
@@ -235,7 +234,6 @@ public:
         return WriteData<T>(address, value);
     }
 
-    // --- AOB PATTERN SCANNER ---
     static uintptr_t FindPattern(uintptr_t base, size_t size, const char* pattern, const char* mask) {
         size_t maskLen = strlen(mask);
         for (size_t i = 0; i < size - maskLen; i++) {
@@ -319,30 +317,6 @@ namespace CombatModules {
         }
     }
 
-    void ApplyAutoPistol(uintptr_t localPlayer) {
-        if (!NoxConfig::auto_pistol || !localPlayer) return;
-        uintptr_t weaponMgr = Memory::Read<uintptr_t>(localPlayer + Offsets::WeaponManager_Offset);
-        if (!weaponMgr || weaponMgr < 0x1000) return;
-        uintptr_t currentWeapon = Memory::Read<uintptr_t>(weaponMgr + Offsets::CurrentWeapon_Offset);
-        if (!currentWeapon || currentWeapon < 0x1000) return;
-        Memory::WriteDataDirty<float>(currentWeapon + 0x70, 0.001f);
-    }
-
-    void ApplyFOVAndThirdPerson(uintptr_t game_manager) {
-        if (!game_manager) return;
-        uintptr_t cameraInstance = Memory::Read<uintptr_t>(game_manager + 0xD0);
-        if (!cameraInstance || cameraInstance < 0x1000) return;
-
-        if (NoxConfig::fov_changer_enabled) {
-            Memory::WriteDataDirty<float>(cameraInstance + Offsets::CameraFOV_Offset, NoxConfig::custom_camera_fov);
-        }
-        if (NoxConfig::third_person_view) {
-            Memory::WriteDataDirty<float>(cameraInstance + Offsets::CameraDist_Offset, 3.5f);
-        } else {
-            Memory::WriteDataDirty<float>(cameraInstance + Offsets::CameraDist_Offset, 0.0f);
-        }
-    }
-
     void ApplySpeedHack(uintptr_t localPlayer) {
         if (!NoxConfig::speed_hack || !localPlayer) return;
         uintptr_t movementInstance = Memory::Read<uintptr_t>(localPlayer + 0xB0);
@@ -360,43 +334,6 @@ namespace CombatModules {
         }
     }
 
-    void ApplyPsychModules(uintptr_t game_manager) {
-        if (!game_manager || game_manager < 0x1000) return;
-        uintptr_t cameraController = Memory::Read<uintptr_t>(game_manager + 0xD0);
-        if (!cameraController || cameraController < 0x1000) return;
-        uintptr_t viewAnglesPtr = cameraController + 0x118;
-
-        if (NoxConfig::spinbot_enabled) {
-            static float currentYaw = 0.0f;
-            currentYaw += NoxConfig::spinbot_speed;
-            if (currentYaw > 360.0f) currentYaw = 0.0f;
-            Vector2 angles = Memory::Read<Vector2>(viewAnglesPtr);
-            Memory::WriteDataDirty<Vector2>(viewAnglesPtr, {angles.x, currentYaw});
-        } else if (NoxConfig::anti_aim_enabled) {
-            static bool toggle = false;
-            toggle = !toggle;
-            float fakeYaw = toggle ? 180.0f : -180.0f;
-            Vector2 angles = Memory::Read<Vector2>(viewAnglesPtr);
-            Memory::WriteDataDirty<Vector2>(viewAnglesPtr, {89.0f, fakeYaw});
-        }
-    }
-
-    void ApplyMaterialChams(uintptr_t entityEntry) {
-        if (!NoxConfig::material_chams || !entityEntry) return;
-        uintptr_t characterModel = Memory::Read<uintptr_t>(entityEntry + 0xD8);
-        if (!characterModel || characterModel < 0x1000) return;
-        uintptr_t rendererInstance = Memory::Read<uintptr_t>(characterModel + 0x20);
-        if (!rendererInstance || rendererInstance < 0x1000) return;
-        Memory::WriteDataDirty<int>(rendererInstance + 0x44, 8); 
-    }
-
-    void ApplyHitboxScaler(uintptr_t entityEntry) {
-        if (!NoxConfig::hit_box_scaler || !entityEntry) return;
-        uintptr_t characterModel = Memory::Read<uintptr_t>(entityEntry + 0xD8);
-        if (!characterModel || characterModel < 0x1000) return;
-        Memory::WriteDataDirty<float>(characterModel + Offsets::HitboxSize_Offset, NoxConfig::box_scale_factor);
-    }
-
     void ApplySkinChanger(uintptr_t localPlayer) {
         if (!NoxConfig::skin_changer_enabled || !localPlayer) return;
         uintptr_t weaponMgr = Memory::Read<uintptr_t>(localPlayer + Offsets::WeaponManager_Offset);
@@ -405,62 +342,6 @@ namespace CombatModules {
         if (!currentWeapon || currentWeapon < 0x1000) return;
         Memory::WriteDataDirty<int>(currentWeapon + Offsets::PaintKit_Offset, NoxConfig::custom_paint_kit);
         Memory::WriteDataDirty<float>(currentWeapon + Offsets::Wear_Offset, NoxConfig::weapon_wear);
-    }
-
-    void RunTriggerbot(uintptr_t localPlayer, const std::vector<PlayerData>& players, float screenW, float screenH) {
-        if (!NoxConfig::triggerbot_enabled || !localPlayer || players.empty()) return;
-        uintptr_t weaponMgr = Memory::Read<uintptr_t>(localPlayer + Offsets::WeaponManager_Offset);
-        if (!weaponMgr || weaponMgr < 0x1000) return;
-        uintptr_t currentWeapon = Memory::Read<uintptr_t>(weaponMgr + Offsets::CurrentWeapon_Offset);
-        if (!currentWeapon || currentWeapon < 0x1000) return;
-
-        Vector2 screenCenter = {screenW * 0.5f, screenH * 0.5f};
-        for (const auto& p : players) {
-            if (!p.isAlive) continue;
-            if (screenCenter.distance(p.screenHeadPos) < 15.0f) {
-                Memory::WriteDataDirty<bool>(currentWeapon + 0x68, true);
-                break;
-            }
-        }
-    }
-
-    void RunAimbotAndSilent(const std::vector<PlayerData>& players, uintptr_t game_manager, float screenW, float screenH) {
-        if ((!NoxConfig::aimbot_enabled && !NoxConfig::silent_aim_enabled) || players.empty()) return;
-
-        Vector2 screenCenter = {screenW * 0.5f, screenH * 0.5f};
-        float closestDist = NoxConfig::aimbot_fov;
-        Vector2 targetScreenPos = {-1.0f, -1.0f};
-        bool targetFound = false;
-
-        for (const auto& p : players) {
-            if (!p.isAlive) continue;
-            Vector2 targetPos = (NoxConfig::aimbot_bone == 1) ? p.screenHeadPos : p.screenPos;
-            float dist = screenCenter.distance(targetPos);
-
-            if (dist < closestDist) {
-                closestDist = dist;
-                targetScreenPos = targetPos;
-                targetFound = true;
-            }
-        }
-
-        if (targetFound) {
-            uintptr_t cameraController = Memory::Read<uintptr_t>(game_manager + 0xD0);
-            if (!cameraController || cameraController < 0x1000) return;
-            uintptr_t viewAnglesPtr = cameraController + 0x118;
-
-            if (NoxConfig::silent_aim_enabled) {
-                Memory::WriteDataDirty<Vector2>(viewAnglesPtr + 0x8, {targetScreenPos.y, targetScreenPos.x});
-            } else if (NoxConfig::aimbot_enabled) {
-                float deltaX = (targetScreenPos.x - screenCenter.x) / NoxConfig::aimbot_smooth;
-                float deltaY = (targetScreenPos.y - screenCenter.y) / NoxConfig::aimbot_smooth;
-                Vector2 currentAngles = Memory::Read<Vector2>(viewAnglesPtr);
-                Memory::WriteDataDirty<Vector2>(viewAnglesPtr, {
-                    currentAngles.x + (deltaY * 0.015f), 
-                    currentAngles.y + (deltaX * 0.015f)
-                });
-            }
-        }
     }
 }
 
@@ -485,34 +366,33 @@ namespace CombatModules {
 }
 
 - (void)setupPipeline {
-    std::string shaderSrc = OBF_STR(
-        "#include <metal_stdlib>\n"
-        "using namespace metal;\n"
-        "struct VertexInput {\n"
-        "    float2 position [[attribute(0)]];\n"
-        "    float4 color [[attribute(1)]];\n"
-        "};\n"
-        "struct VertexOutput {\n"
-        "    float4 position [[position]];\n"
-        "    float4 color;\n"
-        "};\n"
-        "vertex VertexOutput vertexMain(VertexInput in [[stage_in]]) {\n"
-        "    VertexOutput out;\n"
-        "    out.position = float4(in.position, 0.0, 1.0);\n"
-        "    out.color = in.color;\n"
-        "    return out;\n"
-        "}\n"
-        "fragment float4 fragmentMain(VertexOutput in [[stage_in]]) {\n"
-        "    return in.color;\n"
-        "}"
-    );
+    std::string shaderSrc = "                           \
+    #include <metal_stdlib>                             \
+    using namespace metal;                              \
+    struct VertexInput {                                \
+        float2 position [[attribute(0)]];               \
+        float4 color [[attribute(1)]];                  \
+    };                                                  \
+    struct VertexOutput {                               \
+        float4 position [[position]];                   \
+        float4 color;                                   \
+    };                                                  \
+    vertex VertexOutput vertexMain(VertexInput in [[stage_in]]) {\
+        VertexOutput out;                               \
+        out.position = float4(in.position, 0.0, 1.0);   \
+        out.color = in.color;                           \
+        return out;                                     \
+    }                                                   \
+    fragment float4 fragmentMain(VertexOutput in [[stage_in]]) {\
+        return in.color;                                \
+    }";
 
     NSError *error = nil;
     id<MTLLibrary> library = [self.device newLibraryWithSource:[NSString stringWithUTF8String:shaderSrc.c_str()] options:nil error:&error];
     if (!library) return;
 
-    id<MTLFunction> vertFunc = [library newFunctionWithName:[NSString stringWithUTF8String:OBF_STR("vertexMain").c_str()]];
-    id<MTLFunction> fragFunc = [library newFunctionWithName:[NSString stringWithUTF8String:OBF_STR("fragmentMain").c_str()]];
+    id<MTLFunction> vertFunc = [library newFunctionWithName:@"vertexMain"];
+    id<MTLFunction> fragFunc = [library newFunctionWithName:@"fragmentMain"];
 
     MTLRenderPipelineDescriptor *desc = [[MTLRenderPipelineDescriptor alloc] init];
     desc.vertexFunction = vertFunc;
@@ -564,7 +444,7 @@ namespace CombatModules {
 
 - (void)drawInMTKView:(MTKView *)view {
     id<MTLCommandBuffer> commandBuffer = [self.commandQueue commandBuffer];
-    id<MTLRenderPassDescriptor> renderPassDescriptor = view.currentRenderPassDescriptor;
+    MTLRenderPassDescriptor *renderPassDescriptor = view.currentRenderPassDescriptor;
     
     if (renderPassDescriptor) {
         renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0);
@@ -576,15 +456,15 @@ namespace CombatModules {
         float sw = (float)view.drawableSize.width;
         float sh = (float)view.drawableSize.height;
 
-        // --- Weather Effects (Rain / Snow) ---
+        // Weather FX
         if (NoxConfig::weather_effect_enabled) {
             pthread_mutex_lock(&RenderCache::cache_mutex);
             for (auto& p : RenderCache::weather_particles) {
                 p.y += p.speed;
                 if (p.y > sh) p.y = 0.0f;
-                if (NoxConfig::weather_type == 0) { // Rain
+                if (NoxConfig::weather_type == 0) {
                     [self renderLineWithEncoder:encoder x1:p.x y1:p.y x2:p.x - 1.0f y2:p.y + p.size * 3.0f r:0.6f g:0.8f b:1.0f a:0.5f screenW:sw screenH:sh];
-                } else { // Snow
+                } else {
                     [self renderBoxWithEncoder:encoder x:p.x y:p.y w:p.size h:p.size r:1.0f g:1.0f b:1.0f a:0.7f screenW:sw screenH:sh];
                 }
             }
@@ -604,7 +484,6 @@ namespace CombatModules {
 
         pthread_mutex_lock(&RenderCache::cache_mutex);
         std::vector<PlayerData> playersToRender = RenderCache::cached_players;
-        Vector3 localPos = RenderCache::local_position;
         pthread_mutex_unlock(&RenderCache::cache_mutex);
 
         if (NoxConfig::esp_enabled) {
@@ -628,29 +507,15 @@ namespace CombatModules {
                     [self renderLineWithEncoder:encoder x1:hbX y1:hbY x2:hbX y2:hbY + hbHeight r:0.2f g:0.2f b:0.2f a:0.8f screenW:sw screenH:sh];
                     [self renderLineWithEncoder:encoder x1:hbX y1:hbY + (hbHeight - filledH) x2:hbX y2:hbY + hbHeight r:0.0f g:1.0f b:0.0f a:0.9f screenW:sw screenH:sh];
                 }
-
-                if (NoxConfig::skeleton_esp) {
-                    [self renderLineWithEncoder:encoder x1:p.screenHeadPos.x y1:p.screenHeadPos.y x2:p.screenChestPos.x y2:p.screenChestPos.y r:NoxConfig::skeleton_color.r g:NoxConfig::skeleton_color.g b:NoxConfig::skeleton_color.b a:NoxConfig::skeleton_color.a screenW:sw screenH:sh];
-                    [self renderLineWithEncoder:encoder x1:p.screenChestPos.x y1:p.screenChestPos.y x2:p.screenPelvisPos.x y2:p.screenPelvisPos.y r:NoxConfig::skeleton_color.r g:NoxConfig::skeleton_color.g b:NoxConfig::skeleton_color.b a:NoxConfig::skeleton_color.a screenW:sw screenH:sh];
-                    [self renderLineWithEncoder:encoder x1:p.screenPelvisPos.x y1:p.screenPelvisPos.y x2:p.screenPos.x y2:p.screenPos.y r:NoxConfig::skeleton_color.r g:NoxConfig::skeleton_color.g b:NoxConfig::skeleton_color.b a:NoxConfig::skeleton_color.a screenW:sw screenH:sh];
-                }
             }
         }
 
-        // --- ANIMATED GUI MENU ---
+        // Animated Menu Background
         if (NoxConfig::menu_open) {
             if (NoxConfig::menu_anim_alpha < 1.0f) NoxConfig::menu_anim_alpha += 0.1f;
             float alpha = NoxConfig::menu_anim_alpha;
-
-            float accentR = (NoxConfig::ui_theme_mode == 0) ? 0.2f : (NoxConfig::ui_theme_mode == 1 ? 0.6f : 0.1f);
-            float accentG = (NoxConfig::ui_theme_mode == 0) ? 0.6f : (NoxConfig::ui_theme_mode == 1 ? 0.2f : 0.9f);
-            float accentB = (NoxConfig::ui_theme_mode == 0) ? 1.0f : (NoxConfig::ui_theme_mode == 1 ? 0.9f : 0.2f);
-
             [self renderBoxWithEncoder:encoder x:NoxConfig::menu_x y:NoxConfig::menu_y w:400.0f h:500.0f r:0.1f g:0.1f b:0.13f a:0.92f * alpha screenW:sw screenH:sh];
             [self renderBoxWithEncoder:encoder x:NoxConfig::menu_x y:NoxConfig::menu_y w:400.0f h:40.0f r:0.18f g:0.18f b:0.23f a:0.98f * alpha screenW:sw screenH:sh];
-            
-            float tabW = 400.0f / 4.0f;
-            [self renderBoxWithEncoder:encoder x:NoxConfig::menu_x + (NoxConfig::current_tab * tabW) y:NoxConfig::menu_y + 40.0f w:tabW h:25.0f r:accentR g:accentG b:accentB a:0.9f * alpha screenW:sw screenH:sh];
         }
 
         [encoder endEncoding];
@@ -667,7 +532,7 @@ void* NoxMainThread(void* arg) {
         uint32_t image_count = _dyld_image_count();
         for (uint32_t i = 0; i < image_count; i++) {
             const char* image_name = _dyld_get_image_name(i);
-            if (image_name && strstr(image_name, OBF_STR("UnityFramework").c_str())) {
+            if (image_name && strstr(image_name, "UnityFramework")) {
                 const struct mach_header_64* header = (const struct mach_header_64*)_dyld_get_image_header(i);
                 if (header) {
                     uintptr_t slide = _dyld_get_image_vmaddr_slide(i);
@@ -679,36 +544,40 @@ void* NoxMainThread(void* arg) {
         if (NoxConfig::il2cpp_base == 0) usleep(500000);
     }
 
-    // Инициализация частиц погоды
+    // Init weather particles
     pthread_mutex_lock(&RenderCache::cache_mutex);
     for (int i = 0; i < 80; ++i) {
         RenderCache::weather_particles.push_back({(float)(rand() % 1170), (float)(rand() % 2532), (float)(2 + rand() % 5), (float)(1 + rand() % 3)});
     }
     pthread_mutex_unlock(&RenderCache::cache_mutex);
 
-    // Динамический поиск GameManager через AOB Pattern Scanning
-    const char* pattern = "\x48\x8B\x05\x00\x00\x00\x00\x48\x8B\x48\x10";
-    const char* mask = "xxx????xxxx";
-    uintptr_t foundAddress = Memory::FindPattern(NoxConfig::il2cpp_base, 0x5000000, pattern, mask);
-    if (foundAddress != 0) {
-        int32_t ripOffset = *(int32_t*)(foundAddress + 3);
-        NoxConfig::game_manager_instance = foundAddress + 7 + ripOffset;
-    } else {
-        NoxConfig::game_manager_instance = NoxConfig::il2cpp_base + 0x3F88B20;
-    }
-
+    // Main Loop
     while (NoxConfig::cheat_active) {
-        // 60 Hz лимитер с анти-детект джиттером
         if (NoxConfig::anti_detect_shield) {
             usleep(3000 + (rand() % 1000));
         } else {
             usleep(13500);
         }
 
-        uintptr_t game_manager = Memory::Read<uintptr_t>(NoxConfig::game_manager_instance);
+        if (NoxConfig::il2cpp_base == 0) continue;
+        
+        uintptr_t game_manager = Memory::Read<uintptr_t>(NoxConfig::il2cpp_base + 0x3F88B20);
         if (!game_manager || game_manager < 0x1000) continue;
 
-        uintptr_t local_player = Memory::Read<uintptr_t>(game_manager + 0x38);
+        uintptr_t localPlayer = Memory::Read<uintptr_t>(game_manager + Offsets::LocalPlayer_Offset);
+        if (!localPlayer || localPlayer < 0x1000) continue;
+
+        CombatModules::ApplyNoRecoilAndSpread(localPlayer);
+        CombatModules::ApplyRapidFire(localPlayer);
+        CombatModules::ApplySpeedHack(localPlayer);
+        CombatModules::ApplyBunnyHop(localPlayer);
+        CombatModules::ApplySkinChanger(localPlayer);
     }
-    return nullptr;
+    return NULL;
+}
+
+// --- CONSTRUCTOR INITIALIZER ---
+__attribute__((constructor)) void NoxInit() {
+    pthread_t thread;
+    pthread_create(&thread, NULL, NoxMainThread, NULL);
 }
