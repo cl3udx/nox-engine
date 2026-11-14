@@ -16,9 +16,7 @@ jobs:
 
     - name: Configure CMake for iOS
       run: |
-        mkdir build
-        cd build
-        cmake .. \
+        cmake -B build \
           -DCMAKE_SYSTEM_NAME=iOS \
           -DCMAKE_OSX_DEPLOYMENT_TARGET="14.0" \
           -DCMAKE_OSX_ARCHITECTURES="arm64"
