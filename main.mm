@@ -708,4 +708,7 @@ void* NoxMainThread(void* arg) {
         uintptr_t game_manager = Memory::Read<uintptr_t>(NoxConfig::game_manager_instance);
         if (!game_manager || game_manager < 0x1000) continue;
 
-        uintptr_t local_player = Memo
+        uintptr_t local_player = Memory::Read<uintptr_t>(game_manager + 0x38);
+}
+    return nullptr;
+}
