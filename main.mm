@@ -1,6 +1,6 @@
 // Language: C++17 / Objective-C++
 // Target: iOS 18.5+ Non-Jailbroken (Standoff 2 / Unity Il2Cpp)
-// Master Build v8.3: Full Enterprise Security + Pattern Scanner + Complete Combat Modules + Animated GUI & Weather FX
+// Master Build v8.5: Full Features Restored + SDK VM Protection Fix
 
 #include <iostream>
 #include <vector>
@@ -20,7 +20,6 @@
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 
-// --- COMPILE-TIME XOR STRING OBFUSCATION ---
 template <int N>
 struct ObfuscatedString {
     char buf[N];
@@ -99,30 +98,25 @@ struct WeatherParticle {
     float size;
 };
 
-// --- CONFIGURATION & ANIMATED MENU STATE ---
 namespace NoxConfig {
     bool cheat_active = true;
     uintptr_t il2cpp_base = 0;
     uintptr_t game_manager_instance = 0;
     
-    // UI & Animations
     bool menu_open = true;
     float menu_x = 100.0f;
     float menu_y = 120.0f;
     float menu_anim_alpha = 0.0f;
     int current_tab = 0;
 
-    // Custom ESP Themes & Colors
     ColorRGBA box_color = {1.0f, 0.0f, 0.0f, 0.85f};
     ColorRGBA skeleton_color = {1.0f, 1.0f, 1.0f, 0.8f};
     ColorRGBA fov_color = {1.0f, 1.0f, 1.0f, 0.4f};
     int ui_theme_mode = 0;
 
-    // Weather Effects
     bool weather_effect_enabled = true;
     int weather_type = 0;
 
-    // Combat & Utilities
     bool esp_enabled = true;
     bool box_esp = true;
     bool health_bar = true;
@@ -163,31 +157,6 @@ namespace NoxConfig {
     bool skin_changer_enabled = true;
     int custom_paint_kit = 1337;
     float weapon_wear = 0.001f;
-
-    void SaveConfig(const std::string& filename) {
-        std::ofstream file(filename);
-        if (!file.is_open()) return;
-        file << "esp_enabled=" << esp_enabled << "\n";
-        file << "box_esp=" << box_esp << "\n";
-        file << "aimbot_enabled=" << aimbot_enabled << "\n";
-        file << "silent_aim_enabled=" << silent_aim_enabled << "\n";
-        file << "bunny_hop=" << bunny_hop << "\n";
-        file << "weather_type=" << weather_type << "\n";
-        file.close();
-    }
-
-    void LoadConfig(const std::string& filename) {
-        std::ifstream file(filename);
-        if (!file.is_open()) return;
-        std::string line;
-        while (std::getline(file, line)) {
-            if (line.find("esp_enabled=") == 0) esp_enabled = std::stoi(line.substr(12));
-            else if (line.find("box_esp=") == 0) box_esp = std::stoi(line.substr(8));
-            else if (line.find("aimbot_enabled=") == 0) aimbot_enabled = std::stoi(line.substr(15));
-            else if (line.find("weather_type=") == 0) weather_type = std::stoi(line.substr(13));
-        }
-        file.close();
-    }
 }
 
 namespace RenderCache {
@@ -216,13 +185,13 @@ public:
         mach_port_t task = mach_task_self();
         mach_vm_size_t page_size = 0x1000;
         
-        kern_return_t kr = mach_vm_protect(task, page_start, page_size, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+        kern_return_t kr = vm_protect(task, page_start, page_size, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
         if (kr != KERN_SUCCESS) return false;
 
         kr = mach_vm_write(task, address, (vm_offset_t)&value, sizeof(T));
         bool success = (kr == KERN_SUCCESS);
 
-        mach_vm_protect(task, page_start, page_size, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+        vm_protect(task, page_start, page_size, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
         return success;
     }
 
@@ -401,7 +370,6 @@ namespace CombatModules {
     }
 }
 
-// --- METAL RENDERER & ANIMATED GUI ---
 @interface NoxOverlayController : NSObject <MTKViewDelegate> {
     id<MTLRenderPipelineState> _pipelineState;
 }
@@ -464,12 +432,12 @@ namespace CombatModules {
 - (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size {}
 
 - (vector_float2)toNDC:(float)x y:(float)y screenWidth:(float)w screenHeight:(float)h {
-    return (vector_float2){ (x / w) * 2.0f - 1.0f, 1.0f - (y / h) * 2.0f };
+    return vector_float2{ (x / w) * 2.0f - 1.0f, 1.0f - (y / h) * 2.0f };
 }
 
 - (void)renderLineWithEncoder:(id<MTLRenderCommandEncoder>)encoder x1:(float)x1 y1:(float)y1 x2:(float)x2 y2:(float)y2 r:(float)r g:(float)g b:(float)b a:(float)a screenW:(float)sw screenH:(float)sh {
-    vector_float2 p1 = [self toNDC:x1 y1 screenWidth:sw screenHeight:sh];
-    vector_float2 p2 = [self toNDC:x2 y2 screenWidth:sw screenHeight:sh];
+    vector_float2 p1 = vector_float2{ (x1 / sw) * 2.0f - 1.0f, 1.0f - (y1 / sh) * 2.0f };
+    vector_float2 p2 = vector_float2{ (x2 / sw) * 2.0f - 1.0f, 1.0f - (y2 / sh) * 2.0f };
     Vertex2D vertices[2] = { { {p1.x, p1.y}, {r, g, b, a} }, { {p2.x, p2.y}, {r, g, b, a} } };
     id<MTLBuffer> buf = [self.device newBufferWithBytes:vertices length:sizeof(vertices) options:MTLResourceStorageModeShared];
     [encoder setRenderPipelineState:_pipelineState];
@@ -512,7 +480,6 @@ namespace CombatModules {
         float sw = (float)view.drawableSize.width;
         float sh = (float)view.drawableSize.height;
 
-        // Weather FX
         if (NoxConfig::weather_effect_enabled) {
             pthread_mutex_lock(&RenderCache::cache_mutex);
             for (auto& p : RenderCache::weather_particles) {
@@ -572,7 +539,6 @@ namespace CombatModules {
             }
         }
 
-        // Animated Menu Background
         if (NoxConfig::menu_open) {
             if (NoxConfig::menu_anim_alpha < 1.0f) NoxConfig::menu_anim_alpha += 0.1f;
             float alpha = NoxConfig::menu_anim_alpha;
@@ -588,7 +554,6 @@ namespace CombatModules {
 
 @end
 
-// --- MAIN WORKER THREAD (60 HZ OPTIMIZED) ---
 void* NoxMainThread(void* arg) {
     while (NoxConfig::il2cpp_base == 0) {
         uint32_t image_count = _dyld_image_count();
@@ -606,14 +571,12 @@ void* NoxMainThread(void* arg) {
         if (NoxConfig::il2cpp_base == 0) usleep(500000);
     }
 
-    // Init weather particles
     pthread_mutex_lock(&RenderCache::cache_mutex);
     for (int i = 0; i < 80; ++i) {
         RenderCache::weather_particles.push_back({(float)(rand() % 1170), (float)(rand() % 2532), (float)(2 + rand() % 5), (float)(1 + rand() % 3)});
     }
     pthread_mutex_unlock(&RenderCache::cache_mutex);
 
-    // Main Loop
     while (NoxConfig::cheat_active) {
         if (NoxConfig::anti_detect_shield) {
             usleep(3000 + (rand() % 1000));
@@ -638,7 +601,6 @@ void* NoxMainThread(void* arg) {
     return NULL;
 }
 
-// --- CONSTRUCTOR INITIALIZER ---
 __attribute__((constructor)) void NoxInit() {
     pthread_t thread;
     pthread_create(&thread, NULL, NoxMainThread, NULL);
