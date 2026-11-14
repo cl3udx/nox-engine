@@ -1,6 +1,6 @@
 // Language: C++17 / Objective-C++
 // Target: iOS 18.5+ Non-Jailbroken (Standoff 2 / Unity Il2Cpp)
-// Master Build v8.2: Enterprise Security + Pattern Scanner + Memory Protection Restoration + 60Hz Optimized + Animated GUI & Weather FX
+// Master Build v8.3: Full Enterprise Security + Pattern Scanner + Complete Combat Modules + Animated GUI & Weather FX
 
 #include <iostream>
 #include <vector>
@@ -116,11 +116,11 @@ namespace NoxConfig {
     ColorRGBA box_color = {1.0f, 0.0f, 0.0f, 0.85f};
     ColorRGBA skeleton_color = {1.0f, 1.0f, 1.0f, 0.8f};
     ColorRGBA fov_color = {1.0f, 1.0f, 1.0f, 0.4f};
-    int ui_theme_mode = 0; // 0: Cyber Neon, 1: Dark Purple, 2: Matrix Green
+    int ui_theme_mode = 0;
 
     // Weather Effects
     bool weather_effect_enabled = true;
-    int weather_type = 0; // 0: Rain, 1: Snow
+    int weather_type = 0;
 
     // Combat & Utilities
     bool esp_enabled = true;
@@ -343,6 +343,62 @@ namespace CombatModules {
         Memory::WriteDataDirty<int>(currentWeapon + Offsets::PaintKit_Offset, NoxConfig::custom_paint_kit);
         Memory::WriteDataDirty<float>(currentWeapon + Offsets::Wear_Offset, NoxConfig::weapon_wear);
     }
+
+    void RunTriggerbot(uintptr_t localPlayer, const std::vector<PlayerData>& players, float screenW, float screenH) {
+        if (!NoxConfig::triggerbot_enabled || !localPlayer || players.empty()) return;
+        uintptr_t weaponMgr = Memory::Read<uintptr_t>(localPlayer + Offsets::WeaponManager_Offset);
+        if (!weaponMgr || weaponMgr < 0x1000) return;
+        uintptr_t currentWeapon = Memory::Read<uintptr_t>(weaponMgr + Offsets::CurrentWeapon_Offset);
+        if (!currentWeapon || currentWeapon < 0x1000) return;
+
+        Vector2 screenCenter = {screenW * 0.5f, screenH * 0.5f};
+        for (const auto& p : players) {
+            if (!p.isAlive) continue;
+            if (screenCenter.distance(p.screenHeadPos) < 15.0f) {
+                Memory::WriteDataDirty<bool>(currentWeapon + 0x68, true);
+                break;
+            }
+        }
+    }
+
+    void RunAimbotAndSilent(const std::vector<PlayerData>& players, uintptr_t game_manager, float screenW, float screenH) {
+        if ((!NoxConfig::aimbot_enabled && !NoxConfig::silent_aim_enabled) || players.empty()) return;
+
+        Vector2 screenCenter = {screenW * 0.5f, screenH * 0.5f};
+        float closestDist = NoxConfig::aimbot_fov;
+        Vector2 targetScreenPos = {-1.0f, -1.0f};
+        bool targetFound = false;
+
+        for (const auto& p : players) {
+            if (!p.isAlive) continue;
+            Vector2 targetPos = (NoxConfig::aimbot_bone == 1) ? p.screenHeadPos : p.screenPos;
+            float dist = screenCenter.distance(targetPos);
+
+            if (dist < closestDist) {
+                closestDist = dist;
+                targetScreenPos = targetPos;
+                targetFound = true;
+            }
+        }
+
+        if (targetFound) {
+            uintptr_t cameraController = Memory::Read<uintptr_t>(game_manager + 0xD0);
+            if (!cameraController || cameraController < 0x1000) return;
+            uintptr_t viewAnglesPtr = cameraController + 0x118;
+
+            if (NoxConfig::silent_aim_enabled) {
+                Memory::WriteDataDirty<Vector2>(viewAnglesPtr + 0x8, {targetScreenPos.y, targetScreenPos.x});
+            } else if (NoxConfig::aimbot_enabled) {
+                float deltaX = (targetScreenPos.x - screenCenter.x) / NoxConfig::aimbot_smooth;
+                float deltaY = (targetScreenPos.y - screenCenter.y) / NoxConfig::aimbot_smooth;
+                Vector2 currentAngles = Memory::Read<Vector2>(viewAnglesPtr);
+                Memory::WriteDataDirty<Vector2>(viewAnglesPtr, {
+                    currentAngles.x + (deltaY * 0.015f), 
+                    currentAngles.y + (deltaX * 0.015f)
+                });
+            }
+        }
+    }
 }
 
 // --- METAL RENDERER & ANIMATED GUI ---
@@ -506,6 +562,12 @@ namespace CombatModules {
                     float filledH = hbHeight * ((float)p.health / 100.0f);
                     [self renderLineWithEncoder:encoder x1:hbX y1:hbY x2:hbX y2:hbY + hbHeight r:0.2f g:0.2f b:0.2f a:0.8f screenW:sw screenH:sh];
                     [self renderLineWithEncoder:encoder x1:hbX y1:hbY + (hbHeight - filledH) x2:hbX y2:hbY + hbHeight r:0.0f g:1.0f b:0.0f a:0.9f screenW:sw screenH:sh];
+                }
+
+                if (NoxConfig::skeleton_esp) {
+                    [self renderLineWithEncoder:encoder x1:p.screenHeadPos.x y1:p.screenHeadPos.y x2:p.screenChestPos.x y2:p.screenChestPos.y r:NoxConfig::skeleton_color.r g:NoxConfig::skeleton_color.g b:NoxConfig::skeleton_color.b a:NoxConfig::skeleton_color.a screenW:sw screenH:sh];
+                    [self renderLineWithEncoder:encoder x1:p.screenChestPos.x y1:p.screenChestPos.y x2:p.screenPelvisPos.x y2:p.screenPelvisPos.y r:NoxConfig::skeleton_color.r g:NoxConfig::skeleton_color.g b:NoxConfig::skeleton_color.b a:NoxConfig::skeleton_color.a screenW:sw screenH:sh];
+                    [self renderLineWithEncoder:encoder x1:p.screenPelvisPos.x y1:p.screenPelvisPos.y x2:p.screenPos.x y2:p.screenPos.y r:NoxConfig::skeleton_color.r g:NoxConfig::skeleton_color.g b:NoxConfig::skeleton_color.b a:NoxConfig::skeleton_color.a screenW:sw screenH:sh];
                 }
             }
         }
